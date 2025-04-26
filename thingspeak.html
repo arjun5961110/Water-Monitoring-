@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Smart Water Quality Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-color: #ffffff;
+      --text-color: #000000;
+      --card-bg: #f0f0f0;
+      --accent: #4285F4;
+    }
+
+    [data-theme="dark"] {
+      --bg-color: #121212;
+      --text-color: #ffffff;
+      --card-bg: #1e1e1e;
+      --accent: #90caf9;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      padding: 20px;
+      transition: background-color 0.3s, color 0.3s;
+    }
+
+    .dashboard {
+      max-width: 1000px;
+      margin: auto;
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    .toggle {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 20px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 10px;
+      text-align: center;
+      border-bottom: 1px solid #ccc;
+    }
+    th {
+      background-color: var(--accent);
+      color: white;
+    }
+
+    .highlight {
+      animation: blink 1s ease-in-out 2;
+    }
+    @keyframes blink {
+      0% { background-color: #ffff99; }
+      50% { background-color: var(--card-bg); }
+      100% { background-color: #ffff99; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="dashboard">
+  <h2>Smart Water Quality Monitoring (IST)</h2>
+  <div class="toggle">
+    <button onclick="toggleTheme()">Toggle Light/Dark Mode</button>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Time (IST)</th>
+          <th>Temperature (°C)</th>
+          <th>Turbidity (NTU)</th>
+          <th>TDS (ppm)</th>
+        </tr>
+      </thead>
+      <tbody id="data-body"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <canvas id="chart1"></canvas>
+  </div>
+  <div class="card">
+    <canvas id="chart2"></canvas>
+  </div>
+  <div class="card">
+    <canvas id="chart3"></canvas>
+  </div>
+</div>
+
+<script>
+const channelID = '2932612';
+const readAPIKey = 'T3X5GD1006P197WG';
+let chart1, chart2, chart3;
+let lastFeedTime = null;
+
+function toggleTheme() {
+  document.documentElement.toggleAttribute('data-theme', true);
+  document.documentElement.dataset.theme = 
+    document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+}
+
+async function fetchData() {
+  try {
+    const res = await fetch(`https://api.thingspeak.com/channels/${channelID}/feeds.json?api_key=${readAPIKey}&results=20`);
+    const json = await res.json();
+    const feeds = json.feeds;
+    const table = document.getElementById("data-body");
+    table.innerHTML = "";
+
+    const timeLabels = [], temperature = [], turbidity = [], tds = [];
+
+    feeds.forEach(feed => {
+      const dateUTC = new Date(feed.created_at);
+      const dateIST = new Date(dateUTC.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const timeIST = dateIST.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const isNew = !lastFeedTime || new Date(feed.created_at) > new Date(lastFeedTime);
+
+      const row = document.createElement('tr');
+      if (isNew) row.classList.add('highlight');
+      row.innerHTML = `
+        <td>${timeIST}</td>
+        <td>${feed.field1 || '-'}</td>
+        <td>${feed.field2 || '-'}</td>
+        <td>${feed.field3 || '-'}</td>
+      `;
+      table.appendChild(row);
+
+      timeLabels.push(timeIST);
+      temperature.push(feed.field1 ? parseFloat(feed.field1) : null);
+      turbidity.push(feed.field2 ? parseFloat(feed.field2) : null);
+      tds.push(feed.field3 ? parseFloat(feed.field3) : null);
+    });
+
+    if (feeds.length > 0) {
+      lastFeedTime = feeds[feeds.length - 1].created_at;
+    }
+
+    drawChart('chart1', chart1, 'Temperature (°C)', timeLabels, temperature, 'red');
+    drawChart('chart2', chart2, 'Turbidity (NTU)', timeLabels, turbidity, 'green');
+    drawChart('chart3', chart3, 'TDS (ppm)', timeLabels, tds, 'blue');
+
+  } catch (e) {
+    console.error("Error fetching data:", e);
+    document.getElementById("data-body").innerHTML = `<tr><td colspan="4">Error loading data</td></tr>`;
+  }
+}
+
+function drawChart(canvasID, chartRef, label, labels, data, color) {
+  const ctx = document.getElementById(canvasID).getContext('2d');
+  if (chartRef) chartRef.destroy();
+  chartRef = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: label,
+        data: data,
+        borderColor: color,
+        fill: false,
+        tension: 0.4,
+        pointRadius: 3,
+        pointHoverRadius: 5
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: { ticks: { maxRotation: 0, minRotation: 0 } },
+        y: { beginAtZero: true }
+      }
+    }
+  });
+
+  if (canvasID === 'chart1') chart1 = chartRef;
+  else if (canvasID === 'chart2') chart2 = chartRef;
+  else if (canvasID === 'chart3') chart3 = chartRef;
+}
+
+fetchData();
+setInterval(fetchData, 15000);
+</script>
+
+</body>
+</html>
