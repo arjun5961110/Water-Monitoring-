@@ -73,6 +73,13 @@
       50% { background-color: var(--card-bg); }
       100% { background-color: #ffff99; }
     }
+
+    .last-updated {
+      text-align: center;
+      font-style: italic;
+      margin-top: 10px;
+      color: gray;
+    }
   </style>
 </head>
 <body>
@@ -106,6 +113,8 @@
   <div class="card">
     <canvas id="chart3"></canvas>
   </div>
+
+  <div class="last-updated" id="last-updated"></div>
 </div>
 
 <script>
@@ -154,6 +163,11 @@ async function fetchData() {
 
     if (feeds.length > 0) {
       lastFeedTime = feeds[feeds.length - 1].created_at;
+
+      const lastDate = new Date(lastFeedTime);
+      const lastIST = new Date(lastDate.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const istString = lastIST.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'medium' });
+      document.getElementById('last-updated').innerText = `Last Updated: ${istString}`;
     }
 
     drawChart('chart1', chart1, 'Temperature (°C)', timeLabels, temperature, 'red');
@@ -163,6 +177,7 @@ async function fetchData() {
   } catch (e) {
     console.error("Error fetching data:", e);
     document.getElementById("data-body").innerHTML = `<tr><td colspan="4">Error loading data</td></tr>`;
+    document.getElementById('last-updated').innerText = "Last Updated: Error fetching data.";
   }
 }
 
